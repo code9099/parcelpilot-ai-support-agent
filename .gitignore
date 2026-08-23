@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+*.db
+*.db-journal
+.pytest_cache/
+scratch_*.py
+test_llm1.py
+real_gemini_test.py

@@ -1021,3 +1021,40 @@ def test_pending_action_with_status_creates_new_instance():
     assert updated.status == "executed"
     assert original is not updated
     assert isinstance(updated.payload, MappingProxyType)
+
+
+def test_lumenworks_credit_reasoning_03_explicit_phrases():
+    def llm1(text, session):
+        return {
+            "intent": "credit_query",
+            "extracted_facts": {
+                "delay_hours": 5.0,
+                "carrier_fault": True,
+                "customer_fault": False
+            },
+            "tool_calls": [{"name": "get_credit_terms", "arguments": {
+                "delay_hours": 5.0,
+                "carrier_fault": True,
+                "customer_fault": False
+            }}]
+        }
+
+    def llm2(dc):
+        gaps = getattr(dc, "evidence_gaps", [])
+        for gap in gaps:
+            missing_fact = gap.get("missing_fact", "") if isinstance(gap, dict) else getattr(gap, "missing_fact", "")
+            assert "customer_fault" not in missing_fact.lower()
+            
+        cr = getattr(dc, "computed_results", {}).get("credit", {})
+        assert cr.get("eligible") is True
+        assert cr.get("credit_amount_inr") == 300
+        assert cr.get("manager_approval_required") is False
+        
+        return {"answer_type": "ANSWER", "text": "Success"}
+
+    orch = get_mock_orchestrator(llm1, llm2)
+    res = orch.process_request(
+        {"role": "customer", "account_id": "ACCT-002"},
+        "LumenWorks pickup was 5 hours late, carrier at fault, customer not at fault. What service credit am I eligible for?"
+    )
+    assert res["answer_type"] == "ANSWER"

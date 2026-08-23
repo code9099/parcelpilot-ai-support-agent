@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logistics Support Demo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="logo">Logistics Support AI</div>
+        <div class="session-selector">
+            <label for="profileSelect">Session:</label>
+            <select id="profileSelect">
+                <option value="NORTHSTAR">Customer: NORTHSTAR</option>
+                <option value="LUMENWORKS">Customer: LUMENWORKS</option>
+                <option value="OPS">Internal: Ops</option>
+            </select>
+        </div>
+    </header>
+    
+    <div class="container">
+        <!-- Main Chat -->
+        <main class="chat-panel">
+            <div id="chatHistory" class="chat-history">
+                <div class="message system">Welcome. Please ask a question about your orders, cancellations, SLAs, or service credits.</div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="userInput" placeholder="Type your request here..." autocomplete="off" />
+                <button id="sendBtn">Send</button>
+            </div>
+        </main>
+        
+        <!-- Debug Sidebar -->
+        <aside class="debug-sidebar">
+            <h3>Diagnostic Trace</h3>
+            <div id="traceContent" class="trace-content">
+                <p class="placeholder">Run a query to see trace information.</p>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Action Confirmation Modal -->
+    <div id="actionModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Confirm Action</h3>
+            <p id="actionDetails"></p>
+            <div class="modal-actions">
+                <button id="confirmActionBtn" class="primary-btn">Confirm</button>
+                <button id="cancelActionBtn" class="secondary-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

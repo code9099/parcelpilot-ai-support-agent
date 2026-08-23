@@ -2,3 +2,9 @@ pandas
 openpyxl
 PyMuPDF
 pytest
+fastapi
+uvicorn
+pydantic
+google-genai
+httpx
+python-dotenv

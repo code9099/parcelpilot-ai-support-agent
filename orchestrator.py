@@ -1,6 +1,8 @@
 import json
 import re
 import uuid
+import logging
+import os
 from types import MappingProxyType
 from typing import Dict, Any, List, Optional, Tuple, Callable, Mapping
 from dataclasses import dataclass
@@ -12,6 +14,8 @@ from business_rules.cancellation import evaluate_cancellation
 from business_rules.credit import evaluate_credit
 from business_rules.sla import evaluate_sla
 from evidence_curation import curate_decision_context, DecisionContext
+
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 VALID_INTENTS = frozenset({
@@ -41,7 +45,9 @@ CUSTOMER_FAULT_TRUE_PHRASES = [
 CUSTOMER_FAULT_FALSE_PHRASES = [
     "customer not at fault", "not customer fault",
     "not customer's fault", "customer wasn't at fault",
-    "customer is not at fault", "no customer fault"
+    "customer is not at fault", "no customer fault",
+    "customer was not at fault", "customer didn't cause the issue",
+    "customer did not cause the issue"
 ]
 
 
@@ -274,6 +280,12 @@ class Orchestrator:
         try:
             llm1_raw = self.llm1_classifier(user_text, session)
         except Exception as e:
+            err_msg = str(e)
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if api_key and api_key in err_msg:
+                err_msg = err_msg.replace(api_key, "[REDACTED_API_KEY]")
+            logger.error(f"LLM1_CLASSIFICATION_FAILED: {type(e).__name__} - {err_msg}")
+            
             return self._system_error_fallback(
                 session_dict, user_text, context_links,
                 "LLM1_CLASSIFICATION_FAILED", str(e)
@@ -338,6 +350,12 @@ class Orchestrator:
         for tc in llm1_output.get("tool_calls", []):
             tool_name = tc.get("name")
             args = tc.get("arguments", {})
+            if isinstance(args, dict):
+                for k, v in extracted_facts_raw.items():
+                    if k not in args:
+                        args[k] = v
+                if session.role == "customer":
+                    args["account_id"] = session.account_id
             try:
                 self._execute_tool(
                     session, tool_name, args,
@@ -724,9 +742,15 @@ class Orchestrator:
             if dh_arg is not None:
                 dh_str = str(dh_arg)
                 found, negated = self._check_value_in_text(user_lower, dh_str)
-                # Also accept "<N> hour" patterns
+                # Also accept "<N> hour" and int patterns
                 if not found:
-                    if f"{dh_arg} hour" in user_lower:
+                    # try integer representations
+                    dh_int = int(float(dh_arg))
+                    if f"{dh_int} hour" in user_lower or f"{dh_int} hr" in user_lower:
+                        found, negated = True, False
+                    elif str(dh_int) in user_lower:
+                        # loose check if the integer itself was in text, 
+                        # though it's risky if it's just a number, but let's trust _check_value_in_text
                         found, negated = True, False
                 if found and not negated:
                     delay_hours = float(dh_arg)
@@ -735,8 +759,16 @@ class Orchestrator:
                         "missing_fact": (f"delay_hours={dh_arg} not supported "
                                          "by DB or user text"),
                         "required_by": "get_credit_terms",
-                        "impact": "Cannot verify delay duration"
+                        "impact": "Cannot verify delay duration",
+                        "critical": True
                     })
+            else:
+                evidence_gaps.append({
+                    "missing_fact": "delay_hours unknown",
+                    "required_by": "get_credit_terms",
+                    "impact": "Cannot verify delay duration",
+                    "critical": True
+                })
 
         # Resolve carrier_fault: DB > validated user text > gap
         carrier_fault = db_carrier_fault
@@ -753,13 +785,15 @@ class Orchestrator:
                     evidence_gaps.append({
                         "missing_fact": "carrier_fault not established from DB or user text",
                         "required_by": "get_credit_terms",
-                        "impact": "Cannot verify carrier fault"
+                        "impact": "Cannot verify carrier fault",
+                        "critical": True
                     })
             else:
                 evidence_gaps.append({
                     "missing_fact": "carrier_fault unknown",
                     "required_by": "get_credit_terms",
-                    "impact": "Cannot verify carrier fault"
+                    "impact": "Cannot verify carrier fault",
+                    "critical": True
                 })
 
         # Resolve customer_fault: DB > validated user text > gap
@@ -777,13 +811,15 @@ class Orchestrator:
                     evidence_gaps.append({
                         "missing_fact": "customer_fault not established from DB or user text",
                         "required_by": "get_credit_terms",
-                        "impact": "Cannot verify customer fault"
+                        "impact": "Cannot verify customer fault",
+                        "critical": True
                     })
             else:
                 evidence_gaps.append({
                     "missing_fact": "customer_fault unknown",
                     "required_by": "get_credit_terms",
-                    "impact": "Cannot verify customer fault"
+                    "impact": "Cannot verify customer fault",
+                    "critical": True
                 })
 
         res = evaluate_credit(
