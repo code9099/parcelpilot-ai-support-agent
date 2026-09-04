@@ -54,8 +54,9 @@ def query_data(session: Session, query_type: str, params: Dict[str, Any]) -> Lis
             
         if where_clauses:
             base_query += " WHERE " + " AND ".join(where_clauses)
-            
-        c.execute(base_query, sql_params)
+            c.execute(base_query, sql_params)
+        else:
+            c.execute(base_query)
         results = c.fetchall()
         conn.close()
         return results
